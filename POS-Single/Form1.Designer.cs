@@ -69,10 +69,11 @@
             this.pnl_login.Name = "pnl_login";
             this.pnl_login.Size = new System.Drawing.Size(1250, 701);
             this.pnl_login.TabIndex = 0;
+            this.pnl_login.Paint += new System.Windows.Forms.PaintEventHandler(this.Pnl_login_Paint);
             // 
             // btn_startEmployee
             // 
-            this.btn_startEmployee.Location = new System.Drawing.Point(614, 423);
+            this.btn_startEmployee.Location = new System.Drawing.Point(740, 423);
             this.btn_startEmployee.Name = "btn_startEmployee";
             this.btn_startEmployee.Size = new System.Drawing.Size(344, 89);
             this.btn_startEmployee.TabIndex = 1;
@@ -98,12 +99,14 @@
             this.pnl_employeeHome.Controls.Add(this.btn_employeeProducts);
             this.pnl_employeeHome.Controls.Add(this.btn_employeeStats);
             this.pnl_employeeHome.Controls.Add(this.btn_employeeOrders);
+            this.pnl_employeeHome.Controls.Add(this.pnl_employeeStats);
             this.pnl_employeeHome.Dock = System.Windows.Forms.DockStyle.Fill;
             this.pnl_employeeHome.Location = new System.Drawing.Point(0, 0);
             this.pnl_employeeHome.Name = "pnl_employeeHome";
             this.pnl_employeeHome.Size = new System.Drawing.Size(1250, 701);
             this.pnl_employeeHome.TabIndex = 1;
             this.pnl_employeeHome.Visible = false;
+            this.pnl_employeeHome.Paint += new System.Windows.Forms.PaintEventHandler(this.Pnl_employeeHome_Paint);
             // 
             // pnl_employeeProducts
             // 
@@ -115,7 +118,6 @@
             // 
             // pnl_employeeOrders
             // 
-            this.pnl_employeeOrders.Controls.Add(this.pnl_employeeStats);
             this.pnl_employeeOrders.Location = new System.Drawing.Point(221, 12);
             this.pnl_employeeOrders.Name = "pnl_employeeOrders";
             this.pnl_employeeOrders.Size = new System.Drawing.Size(1017, 677);
@@ -123,7 +125,7 @@
             // 
             // pnl_employeeStats
             // 
-            this.pnl_employeeStats.Location = new System.Drawing.Point(0, 0);
+            this.pnl_employeeStats.Location = new System.Drawing.Point(221, 12);
             this.pnl_employeeStats.Name = "pnl_employeeStats";
             this.pnl_employeeStats.Size = new System.Drawing.Size(1017, 677);
             this.pnl_employeeStats.TabIndex = 5;
@@ -184,6 +186,7 @@
             this.pnl_customerHome.Size = new System.Drawing.Size(1250, 701);
             this.pnl_customerHome.TabIndex = 7;
             this.pnl_customerHome.Visible = false;
+            this.pnl_customerHome.Paint += new System.Windows.Forms.PaintEventHandler(this.Pnl_customerHome_Paint);
             // 
             // btn_customerPay
             // 
@@ -229,6 +232,7 @@
             this.pnl_newOrder.Size = new System.Drawing.Size(1250, 701);
             this.pnl_newOrder.TabIndex = 3;
             this.pnl_newOrder.Visible = false;
+            this.pnl_newOrder.Paint += new System.Windows.Forms.PaintEventHandler(this.Pnl_newOrder_Paint);
             // 
             // btn_customerCancelOrder
             // 
@@ -252,6 +256,7 @@
             // 
             // pnl_order
             // 
+            this.pnl_order.AutoScroll = true;
             this.pnl_order.Location = new System.Drawing.Point(12, 15);
             this.pnl_order.Name = "pnl_order";
             this.pnl_order.Size = new System.Drawing.Size(591, 605);
@@ -270,6 +275,7 @@
             // 
             // tab_drinks
             // 
+            this.tab_drinks.AutoScroll = true;
             this.tab_drinks.Location = new System.Drawing.Point(4, 22);
             this.tab_drinks.Name = "tab_drinks";
             this.tab_drinks.Padding = new System.Windows.Forms.Padding(3);
@@ -280,6 +286,7 @@
             // 
             // tab_Food
             // 
+            this.tab_Food.AutoScroll = true;
             this.tab_Food.Location = new System.Drawing.Point(4, 22);
             this.tab_Food.Name = "tab_Food";
             this.tab_Food.Padding = new System.Windows.Forms.Padding(3);
@@ -290,6 +297,7 @@
             // 
             // tab_dessert
             // 
+            this.tab_dessert.AutoScroll = true;
             this.tab_dessert.Location = new System.Drawing.Point(4, 22);
             this.tab_dessert.Name = "tab_dessert";
             this.tab_dessert.Padding = new System.Windows.Forms.Padding(3);
@@ -302,22 +310,25 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScroll = true;
             this.ClientSize = new System.Drawing.Size(1250, 701);
             this.Controls.Add(this.pnl_login);
             this.Controls.Add(this.pnl_employeeHome);
             this.Controls.Add(this.pnl_customerHome);
             this.Controls.Add(this.pnl_newOrder);
             this.Name = "Form1";
-            this.Text = "Form1";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            this.Text = "Restaurant";
+            this.Load += new System.EventHandler(this.Form1_Load);
             this.pnl_login.ResumeLayout(false);
             this.pnl_employeeHome.ResumeLayout(false);
-            this.pnl_employeeHome.PerformLayout();
             this.pnl_employeeOrders.ResumeLayout(false);
             this.pnl_customerHome.ResumeLayout(false);
             this.pnl_customerHome.PerformLayout();
             this.pnl_newOrder.ResumeLayout(false);
             this.tbg_itemList.ResumeLayout(false);
             this.ResumeLayout(false);
+            this.PerformLayout();
 
         }
 

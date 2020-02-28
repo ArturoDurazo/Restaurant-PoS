@@ -10,15 +10,17 @@ namespace POS_Single
     class Item
     {
         private int category;
+        private int itemId;
         private Image thumbnail;
         private String name;
         private String description;
-        private Decimal price;
+        private int price;
         private Boolean available;
 
-        public Item(int category, Image thumbnail, String name, String description, Decimal price, Boolean available)
+        public Item(int category,int itemId, Image thumbnail, String name, String description, int price, Boolean available)
         {
             this.category = category;
+            this.itemId = itemId;
             this.thumbnail = thumbnail;
             this.name = name;
             this.description = description;
@@ -30,6 +32,12 @@ namespace POS_Single
         {
             return category;
         }
+
+        public int getId()
+        {
+            return itemId;
+        }
+
         public Image getThumbnail()
         {
             return thumbnail;
@@ -45,7 +53,7 @@ namespace POS_Single
             return description;
         }
 
-        public Decimal getPrice()
+        public int getPrice()
         {
             return price;
         }
