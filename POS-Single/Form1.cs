@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Resources;
 using System.Windows.Forms;
-using Npgsql;
 using System.Windows.Forms.DataVisualization.Charting;
 using POS_Single.Properties;
-
+using System.Data.SqlClient;
+using System.Data;
 
 namespace POS_Single
 {
@@ -16,12 +16,9 @@ namespace POS_Single
         List<Item> newOrderItems = new List<Item>();
         List<Item> orderedItems = new List<Item>();
         List<int> transactionIds = new List<int>();
-        String connString = "Host=" + Properties.Settings.Default.POSTGRES_HOST +
-            ";Username=" + Properties.Settings.Default.POSTGRES_USER +
-            ";Password=" + Properties.Settings.Default.POSTGRES_PASSWORD +
-            ";Database=" + Properties.Settings.Default.POSTGRES_DB_NAME;
+        DataTable sales = new DataTable();
+        DataTable inventory = new DataTable();
 
-        
         public Form1()
         {
             InitializeComponent();
@@ -64,7 +61,7 @@ namespace POS_Single
         }
 
         private void addItemToOrder(Item item)
-        {
+        {           
             newOrderItems.Add(item);
             updateOrder();
         }
@@ -139,7 +136,7 @@ namespace POS_Single
             {
                 int groupSize = 175;
 
-                if (!item.getAvailable())
+                if (!item.getAvailable() || !item.getToggled())
                 {
                     continue;
                 }
@@ -218,9 +215,7 @@ namespace POS_Single
         {
             //Create a modal asking if cash or card, no functionality.
             //Give total by reading the db with the transactionIds in the list
-            // and += the cost of each
-
-            
+            // and += the cost of each            
             Form payment = new Form();
             int paymentSize = 300;
             payment.MaximizeBox = true;
@@ -260,24 +255,22 @@ namespace POS_Single
         private void Btn_customerStartOrder_Click(object sender, EventArgs e) 
         {
             bool flag = false;
-            //Check that all items in the order are still available in the database
+            
             updateItems();
+            //Check that all items in the order are still available in the database
             foreach (Item x in newOrderItems) { 
                 allItems.TryGetValue(x.getId(), out Item currentItemInAll);
-                if(currentItemInAll.getAvailable() == false)
+                if(!currentItemInAll.getAvailable())
                 {
                     //  If false, remove unavaiable items from newOrderItems List, send message saying "sorry, items unavailable, check order and try again"
                     //      and update avilableItems List
                     System.Windows.Forms.MessageBox.Show("Item " + x.getName() + " just went unavailable");
-                    Console.WriteLine("lmao");
                     newOrderItems.Remove(x);
                     updateOrder();
                     updateItems();
                     updateTabs();
-                    flag = true;
-                   
-                    break;
-                    
+                    flag = true;                
+                    break;                   
                 }
             }
             if (!flag)
@@ -293,39 +286,62 @@ namespace POS_Single
                 {
                     totalOrder += (float)x.getPrice();
                 }
-                using (var conn = new NpgsqlConnection(connString))
-                {
-                    conn.Open();
-                    var cmd = new NpgsqlCommand("INSERT INTO transactions(date, transaction_id, total, status, created_at) VALUES(NOW() :: DATE, DEFAULT, " + totalOrder + ", 1, NOW() :: TIMESTAMP) " +
-                        "RETURNING transaction_id;", conn);
-                    var reader = cmd.ExecuteReader();
-                    while (reader.Read())
-                    {
-                        transaction_id = (int)reader.GetValue(0);
-                        transactionIds.Add(transaction_id);
-                    }
-                    reader.Close();
-                    conn.Close();
-                }
+                string str = Properties.Settings.Default.pos_dbConnection;
+                SqlConnection cnn = new SqlConnection(str);
+                cnn.Open();
+                SqlCommand cmd = cnn.CreateCommand();               
+                SqlTransaction transaction;
+                transaction = cnn.BeginTransaction("Check for Negative Quantity");
+                cmd.Connection = cnn;
+                cmd.Transaction = transaction;
 
+                cmd.CommandText = "INSERT INTO transactions VALUES(" + totalOrder + ", 1, GETDATE())";
+                cmd.ExecuteNonQuery();
+                cmd.CommandText = "SELECT MAX(transaction_id) FROM transactions";
+                SqlDataReader rdr = cmd.ExecuteReader();
+                while (rdr.Read())
+                {
+                    transaction_id = (int)rdr.GetValue(0);
+                    transactionIds.Add(transaction_id);
+                }
+                rdr.Close();
                 //Add every item in newOrderItems to ordered_items table in db using itemId and transactionId obtained prev
                 //Add y to ordered_items table INSERT INTO ordered_items(item_id, transaction_id) VALUES (y.getId(), transactionId)
-                using (var conn2 = new NpgsqlConnection(connString))
-                {
-                    foreach (Item y in newOrderItems)
-                    {
-                        conn2.Open();
-                        orderedItems.Add(y);
-                        var cmd2 = new NpgsqlCommand("INSERT INTO ordered_items(item_id,transaction_id) VALUES(" + y.getId() + "," + transaction_id + ");", conn2);
-                        var reader2 = cmd2.ExecuteReader();
-                        reader2.Close();
-                        conn2.Close();
-                    }
+
+                foreach (Item y in newOrderItems)
+                {                  
+                    orderedItems.Add(y);
+                    cmd.CommandText = "INSERT INTO ordered_items(item_id,transaction_id) VALUES(" + y.getId() + "," + transaction_id + ")";
+                    cmd.ExecuteNonQuery();                   
                 }
+                //check for negatives
+                cmd.CommandText = "SELECT I.item_name, INP.quantity from items I " +
+                    "INNER JOIN recipe R on R.item_id = I.item_id " +
+                    "INNER JOIN recipe_ingredients_bridge RIN on RIN.recipe_id = R.recipe_id " +
+                    "INNER JOIN ingredients_packs INP on INP.ingredient_id = RIN.ingredients_id " +
+                    "WHERE quantity < 0";
+                SqlDataReader rdr2 = cmd.ExecuteReader();
+                if(rdr2.HasRows)
+                {
+                    string message = "The following item(s) are unavailable: \n";
+                    while (rdr2.Read())
+                    {
+                        message += rdr2.GetValue(0).ToString() + ", please reduce item by " +rdr2.GetValue(1).ToString().Replace("-","") + "\n";
+                    }
+                    MessageBox.Show(message);
+                    rdr2.Close();
+                    transaction.Rollback();               
+                }
+                else
+                {
+                    rdr2.Close();                   
+                    transaction.Commit();
+                    System.Windows.Forms.MessageBox.Show("Order Acepted");
+                }
+                cnn.Close();
+
                 newOrderItems.Clear();
-                pnl_order.Controls.Clear();
-                //Send a message "Order accepted"
-                System.Windows.Forms.MessageBox.Show("Order Acepted");
+                pnl_order.Controls.Clear();             
                 //Switch panel to customerHome panel
                 pnl_newOrder.Visible = false;
                 pnl_customerHome.Visible = true;
@@ -364,43 +380,44 @@ namespace POS_Single
             pnl_employeeOrders.Visible = true;
             pnl_employeeProducts.Visible = false;
             pnl_employeeStats.Visible = false;
+            pnl_employeeSales.Visible = false;
+            pnl_employeeInventory.Visible = false;
         }
 
         private void getTransactions()
         {
             pnl_employeeOrders.Controls.Clear();
             Dictionary<int, Transaction> transactions = new Dictionary<int, Transaction>();
-            using (var conn = new NpgsqlConnection(connString))
+            string str = Properties.Settings.Default.pos_dbConnection;
+            SqlConnection cnn = new SqlConnection(str);
+            cnn.Open();
+            SqlCommand cmd = new SqlCommand("SELECT * FROM transactions WHERE status = 1", cnn);
+            SqlDataReader rdr = cmd.ExecuteReader();
+            while (rdr.Read())
             {
-                conn.Open();
-                var cmd = new NpgsqlCommand("SELECT * FROM transactions WHERE status = 1", conn);
-                var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    Transaction t = new Transaction();
-                    t.setTransactionId((int)reader.GetValue(1));
-                    t.setCreatedAt((DateTime)reader.GetValue(4));
-                    transactions.Add(t.getTransactionId(), t);
-                }
-                reader.Close();
-                conn.Close();
+                Transaction t = new Transaction();
+                t.setTransactionId((int)rdr.GetValue(0));
+                t.setCreatedAt((DateTime)rdr.GetValue(3));
+                transactions.Add(t.getTransactionId(), t);
             }
+            rdr.Close();
+            cnn.Close();
 
-            using (var conn = new NpgsqlConnection(connString))
-            {
-                conn.Open();
-                var cmd = new NpgsqlCommand("SELECT ordered_items.transaction_id, items.item_name FROM ordered_items LEFT JOIN items " +
+            cnn.Open();
+            cmd = new SqlCommand("SELECT ordered_items.transaction_id, items.item_name FROM ordered_items LEFT JOIN items " +
                     "ON ordered_items.item_id = items.item_id " +
                     "LEFT JOIN transactions ON transactions.transaction_id = ordered_items.transaction_id " +
-                    "WHERE transactions.status = 1;", conn);
-                var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    int transactionId = (int)reader.GetValue(0);
-                    String item = reader.GetValue(1).ToString();
-                    transactions[transactionId].addItem(item);
-                }
+                    "WHERE transactions.status = 1;", cnn);
+            rdr = cmd.ExecuteReader();
+            while (rdr.Read())
+            {
+                int transactionId = (int)rdr.GetValue(0);
+                String item = rdr.GetValue(1).ToString();
+                transactions[transactionId].addItem(item);
             }
+            rdr.Close();
+            cnn.Close();
+
             displayTransactions(transactions);
         }
 
@@ -491,52 +508,42 @@ namespace POS_Single
         private void orderCompleted(int orderID)
         {
             //update database
-            using (var conn = new NpgsqlConnection(connString))
+            string str = Properties.Settings.Default.pos_dbConnection;
+            SqlConnection cnn = new SqlConnection(str);
+            cnn.Open();
+            SqlCommand cmd = new SqlCommand("UPDATE transactions SET status = 2 WHERE transaction_id = " + orderID, cnn);
+            SqlDataReader rdr = cmd.ExecuteReader();
+            while (rdr.Read())
             {
-                conn.Open();
-                var cmd = new NpgsqlCommand("UPDATE transactions SET status = 2 WHERE transaction_id = " + orderID, conn);
-                var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
 
-                }
-                reader.Close();
-                conn.Close();
             }
+            rdr.Close();
+            cnn.Close();
+
             //clear transactions from panel
             getTransactions();
             //updateEmployeeOrders();
         }
 
-        private void updateEmployeeOrders()
-        {
-
-        }
-
         private void Btn_employeeStats_Click(object sender, EventArgs e)
         {
             //Draw a graph with stats based on orders
-            //  TODO: RESEARCH HOW TO DO GRAPHS IN C#
             //SELECT items.item_name, COUNT(*) AS "Number of Orders"
             //FROM ordered_items LEFT JOIN items ON items.item_id = ordered_items.item_id
             //GROUP BY items.item_id
             Dictionary<String, int> countItems = new Dictionary<String, int>();
-
-            using (var conn = new NpgsqlConnection(connString))
+            string str = Properties.Settings.Default.pos_dbConnection;
+            SqlConnection cnn = new SqlConnection(str);
+            cnn.Open();
+            SqlCommand cmd = new SqlCommand("SELECT * FROM stats", cnn);
+            SqlDataReader rdr = cmd.ExecuteReader();
+            while (rdr.Read())
             {
-                conn.Open();
-                var cmd = new NpgsqlCommand("SELECT items.item_name, COUNT(*) " +
-                    "FROM ordered_items " +
-                    "LEFT JOIN items ON items.item_id = ordered_items.item_id " +
-                    "GROUP BY items.item_id", conn);
-                var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    countItems.Add(reader.GetValue(0).ToString(), Convert.ToInt32(reader.GetValue(1)));
-                }
-                reader.Close();
-                conn.Close();
+                countItems.Add(rdr.GetValue(0).ToString(), Convert.ToInt32(rdr.GetValue(1)));
             }
+            rdr.Close();
+            cnn.Close();
+
             Chart cht_OrderedItems = new Chart();
             ChartArea chA = new ChartArea();
             cht_OrderedItems.ChartAreas.Add(chA);
@@ -554,6 +561,7 @@ namespace POS_Single
             cht_OrderedItems.Series["Items"].SetDefault(true);
             cht_OrderedItems.Series["Items"].Enabled = true;
             cht_OrderedItems.Series["Items"].ChartType = SeriesChartType.Bar;
+            cht_OrderedItems.Series["Items"].IsValueShownAsLabel = true;
 
             foreach (KeyValuePair<String, int> item in countItems)
             {
@@ -568,40 +576,55 @@ namespace POS_Single
             pnl_employeeStats.Visible = true;
             pnl_employeeOrders.Visible = false;
             pnl_employeeProducts.Visible = false;
+            pnl_employeeSales.Visible = false;
+            pnl_employeeInventory.Visible = false;
         }
 
         private void Btn_employeeProducts_Click(object sender, EventArgs e)
         {
+            updateItems();
             pnl_employeeProducts.AutoScroll = true;
+            pnl_employeeProducts.Controls.Clear();
             //Show all items, unavailable items need a sign.
-            foreach (Item item in allItems.Values)
+            if(pnl_employeeProducts.Controls.Count == 0)
             {
-                int groupSize = 175;
-
-                GroupBox groupBox = new GroupBox();
-                groupBox.Size = new Size(groupSize, groupSize);
-
-                CheckBox thumbnailBox = new CheckBox();
-                thumbnailBox.Appearance = Appearance.Button;
-                thumbnailBox.BackgroundImage = item.getThumbnail();
-                thumbnailBox.BackgroundImageLayout = ImageLayout.Stretch;
-                int imageSize = (int)(groupSize * .8);
-                thumbnailBox.Size = new Size(imageSize, imageSize);
-                thumbnailBox.Click += (sender3, e3) => toggledItem(sender3, e3, item);
-                
-                
-                thumbnailBox.Location = new Point((int)(groupSize * .5) - ((int)(imageSize * .5)), 20);
-                groupBox.Controls.Add(thumbnailBox);
-
-                int itemNo = pnl_employeeProducts.Controls.Count;
-                int y = 0;
-                while (itemNo > 4)
+                foreach (Item item in allItems.Values)
                 {
-                    itemNo -= 5;
-                    y++;
-                }
-                groupBox.Location = new Point((itemNo * (groupSize + 25)), y * (groupSize + 25));
-                pnl_employeeProducts.Controls.Add(groupBox);
+                    int groupSize = 175;
+
+                    GroupBox groupBox = new GroupBox();
+                    groupBox.Size = new Size(groupSize, groupSize);
+
+                    CheckBox thumbnailBox = new CheckBox();
+                    thumbnailBox.Appearance = Appearance.Button;
+                    thumbnailBox.BackgroundImage = item.getThumbnail();
+                    thumbnailBox.BackgroundImageLayout = ImageLayout.Stretch;
+                    if (item.getAvailable() == false || item.getToggled() == false)
+                    {
+                        thumbnailBox.BackColor = Color.Red;
+                    }
+                    else
+                    {
+                        thumbnailBox.BackColor = SystemColors.Control;
+                    }
+                    int imageSize = (int)(groupSize * .8);
+                    thumbnailBox.Size = new Size(imageSize, imageSize);
+                    thumbnailBox.Click += (sender3, e3) => toggledItem(sender3, e3, item);
+
+
+                    thumbnailBox.Location = new Point((int)(groupSize * .5) - ((int)(imageSize * .5)), 20);
+                    groupBox.Controls.Add(thumbnailBox);
+
+                    int itemNo = pnl_employeeProducts.Controls.Count;
+                    int y = 0;
+                    while (itemNo > 4)
+                    {
+                        itemNo -= 5;
+                        y++;
+                    }
+                    groupBox.Location = new Point((itemNo * (groupSize + 25)), y * (groupSize + 25));
+                    pnl_employeeProducts.Controls.Add(groupBox);
+                }         
             }
 
             //check if we're already in this tab
@@ -611,45 +634,216 @@ namespace POS_Single
             pnl_employeeProducts.Visible = true;
             pnl_employeeOrders.Visible = false;
             pnl_employeeStats.Visible = false;
+            pnl_employeeSales.Visible = false;
+            pnl_employeeInventory.Visible = false;
         }
 
         private void toggledItem(object sender, EventArgs e, Item itemToggled)
         {
-
-            if (((CheckBox)sender).Checked)
-            {
-                using (var conn = new NpgsqlConnection(connString))
+            string str = Properties.Settings.Default.pos_dbConnection;
+            bool turnON = false;
+            SqlConnection cnn = new SqlConnection(str);
+            if (((CheckBox)sender).BackColor == Color.Red)
+            {            
+                //check if qty
+                cnn.Open();
+                /////////////////////////////////////////////////////////////FUNCTION HERE///////////////////////////////////////////////////////////////
+                SqlCommand cmd = new SqlCommand("SELECT * FROM dbo.toggled_and_available(@ITEM_ID)", cnn);
+                cmd.Parameters.AddWithValue("@ITEM_ID", itemToggled.getId());
+                //SqlDataAdapter da = new SqlDataAdapter(cmd);
+                SqlDataReader rdr = cmd.ExecuteReader();
+                while (rdr.Read())
                 {
-                    conn.Open();
-                    var cmd = new NpgsqlCommand("UPDATE items SET available = false WHERE item_id =" + itemToggled.getId(), conn);
-                    var reader = cmd.ExecuteReader();
-                    while (reader.Read())
+                    if(Convert.ToInt32(rdr.GetValue(0)) == 0)
                     {
-
+                        System.Windows.Forms.MessageBox.Show("Item is missing an ingredient, check inventory.");
                     }
-                    conn.Close();
-                    reader.Close();
+                    else
+                    {
+                        turnON = true;
+                    }
+                }    
+                rdr.Close();               
+                if (turnON)
+                {
+                    ((CheckBox)sender).BackColor = SystemColors.Control;
+                    cmd = new SqlCommand("UPDATE items SET toggled = 1 WHERE item_id =" + itemToggled.getId(), cnn);
+                    cmd.ExecuteNonQuery();
                 }
-                ((CheckBox)sender).BackColor = Color.Red;
+                cnn.Close();
             }
             else
             {
-                using (var conn = new NpgsqlConnection(connString))
-                {
-                    conn.Open();
-                    var cmd = new NpgsqlCommand("UPDATE items SET available = true WHERE item_id =" + itemToggled.getId(), conn);
-                    var reader = cmd.ExecuteReader();
-                    while (reader.Read())
-                    {
+                cnn.Open();
+                SqlCommand cmd = new SqlCommand("UPDATE items SET toggled = 0 WHERE item_id =" + itemToggled.getId(), cnn);
+                cmd.ExecuteNonQuery();
+                cnn.Close();
 
-                    }
-                    conn.Close();
-                    reader.Close();
-                }
-                ((CheckBox)sender).BackColor = SystemColors.Control;
+                ((CheckBox)sender).BackColor = Color.Red;
             }
         }
+       
+        void updateItems()
+        {
+            allItems.Clear();
+            string str = Properties.Settings.Default.pos_dbConnection;
+            SqlConnection cnn = new SqlConnection(str);
+            cnn.Open();
+            SqlCommand cmd = new SqlCommand("SELECT * FROM items ORDER BY item_id", cnn);
+            SqlDataReader rdr = cmd.ExecuteReader();
+            while (rdr.Read())
+            {
+                object[] values = new object[7];
+                rdr.GetValues(values);
+                int category = (int)rdr.GetValue(0);
+                int itemId = (int)rdr.GetValue(1);
+                String filename = (String)rdr.GetValue(3);
+                ResourceManager rm = Resources.ResourceManager;
+                Image thumbnail = (Image)rm.GetObject(filename);
+                String name = (String)rdr.GetValue(2);
+                String description = (String)rdr.GetValue(5);
+                int price = (int)rdr.GetValue(4);
+                Boolean available = (Boolean)rdr.GetValue(6);
+                Boolean toggled = (Boolean)rdr.GetValue(7);
 
+                Item newItem = new Item(category, itemId, thumbnail, name, description, price, available, toggled);
+                allItems.Add(itemId, newItem);
+            }
+            rdr.Close();
+            cnn.Close();
+        }       
+
+        private void btn_sales_Click(object sender, EventArgs e)
+        {
+            btn_printSales.Enabled = false;
+            //reset data table 
+            lbl_salesTotal.Text = "Sales Total: ";
+            lbl_countSales.Text = "Orders:";
+            sales.Rows.Clear();
+            sales.Columns.Clear();
+            sales.Columns.Add("Transaction date").ReadOnly = true;
+            sales.Columns.Add("Transaction ID").ReadOnly = true;
+            sales.Columns.Add("Total").ReadOnly = true;
+            dgr_sales.DataSource = sales;
+            pnl_employeeSales.Visible = true;
+            pnl_employeeProducts.Visible = false;
+            pnl_employeeOrders.Visible = false;
+            pnl_employeeStats.Visible = false;
+            pnl_employeeInventory.Visible = false;
+        }
+         
+        private void btn_send_Click(object sender, EventArgs e)
+        {
+            btn_printSales.Enabled = true;
+            //reset labels and totals
+            lbl_salesTotal.Text = "Sales Total: ";
+            lbl_countSales.Text = "Orders: ";
+            int totalSales = 0;
+            int totalCount = 0;
+            //pull dates and format
+            DateTime dateFROM = dte_from.Value;
+            string stringDateFromdateFROM = dateFROM.ToString("yyyy/MM/dd");
+            DateTime dateTO = dte_to.Value;
+            string stringDateFromdateTO = dateTO.ToString("yyyy/MM/dd");
+            /////////////////////////////////////////////////////////////STORED PROCEDURE HERE///////////////////////////////////////////////////////////////
+            string str = Properties.Settings.Default.pos_dbConnection;
+            SqlConnection cnn = new SqlConnection(str);
+            cnn.Open();
+            SqlCommand cmd = new SqlCommand(
+                "salesTotal", cnn);
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.Add(
+            new SqlParameter("@DATEFROM", stringDateFromdateFROM));
+            cmd.Parameters.Add(
+            new SqlParameter("@DATETO", stringDateFromdateTO));
+            SqlDataReader rdr = cmd.ExecuteReader();
+            while (rdr.Read())
+            {
+                DataRow row = sales.NewRow();
+                row["Transaction date"] = rdr.GetValue(0).ToString();
+                row["Transaction ID"] = rdr.GetValue(1).ToString();
+                row["Total"] = "$ "+rdr.GetValue(2).ToString();                
+                totalCount = (int)rdr.GetValue(3);
+                totalSales = (int)rdr.GetValue(4);
+                sales.Rows.Add(row);
+            }
+            rdr.Close();           
+            cnn.Close();
+            lbl_salesTotal.Text += "$" +totalSales.ToString();
+            lbl_countSales.Text += " " + totalCount.ToString();
+        }
+
+        private void btn_printSales_Click(object sender, EventArgs e)
+        {
+            DateTime dateFROM = dte_from.Value;
+            string stringDateFromdateFROM = dateFROM.ToString("yyyy/MM/dd");
+            DateTime dateTO = dte_to.Value;
+            string stringDateFromdateTO = dateTO.ToString("yyyy/MM/dd");
+            SalesPrint salesPrint = new SalesPrint(stringDateFromdateFROM, stringDateFromdateTO);
+            salesPrint.Show();           
+        }
+
+        private void btn_inventory_Click(object sender, EventArgs e)
+        {
+            btn_add.Enabled = false;
+
+            createInventory();
+
+            pnl_employeeInventory.Visible = true;
+            pnl_employeeProducts.Visible = false;
+            pnl_employeeOrders.Visible = false;
+            pnl_employeeStats.Visible = false;
+            pnl_employeeSales.Visible = false;
+        }
+
+        public void createInventory()
+        {
+            //reset data table 
+            inventory.Rows.Clear();
+            inventory.Columns.Clear();
+            inventory.Columns.Add("Ingredient").ReadOnly = true;
+            inventory.Columns.Add("Quantity").ReadOnly = true;
+
+            //feed dgr
+            string str = Properties.Settings.Default.pos_dbConnection;
+            SqlConnection cnn = new SqlConnection(str);
+            cnn.Open();
+            SqlCommand cmd = new SqlCommand("SELECT * FROM dbo.ingredient_name_and_quantity()", cnn);
+            SqlDataReader rdr = cmd.ExecuteReader();
+            while (rdr.Read())
+            {
+                DataRow row = inventory.NewRow();
+                row["Ingredient"] = rdr.GetValue(0).ToString();
+                cbx_ingredient.Items.Add(rdr.GetValue(0).ToString());
+                row["Quantity"] = rdr.GetValue(1).ToString();
+                inventory.Rows.Add(row);
+            }
+            dgr_inventory.DataSource = inventory;
+            rdr.Close();
+            cnn.Close();
+        }
+
+        private void btn_add_Click(object sender, EventArgs e)
+        {
+            if(num_quantity.Value > 0)
+            {
+                string str = Properties.Settings.Default.pos_dbConnection;
+                SqlConnection cnn = new SqlConnection(str);
+                cnn.Open();
+                SqlCommand cmd = new SqlCommand(
+                "addIngredients", cnn);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add(
+                new SqlParameter("@QTY", num_quantity.Value));
+                cmd.Parameters.Add(
+                new SqlParameter("@NAME", cbx_ingredient.SelectedItem.ToString()));
+                SqlDataReader rdr = cmd.ExecuteReader();
+                rdr.Close();
+                cnn.Close();
+                System.Windows.Forms.MessageBox.Show("Ingredients Succesfully Added");
+                createInventory();
+            }
+        }
 
         private void Btn_employeeExit_Click(object sender, EventArgs e)
         {
@@ -657,59 +851,16 @@ namespace POS_Single
             pnl_employeeHome.Visible = false;
             pnl_login.Visible = true;
         }
-        void updateItems()
-        {
-            allItems.Clear();
-            using (var conn = new NpgsqlConnection(connString))
-            {
-                conn.Open();
-                var cmd = new NpgsqlCommand("SELECT * FROM items ORDER BY item_id", conn);
-                var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    object[] values = new object[7];
-                    reader.GetValues(values);
-                    int category = (int)reader.GetValue(0);
-                    int itemId = (int)reader.GetValue(1);
-                    String filename = (String)reader.GetValue(3);
-                    ResourceManager rm = Resources.ResourceManager;
-                    Image thumbnail = (Image)rm.GetObject(filename);
-                    String name = (String)reader.GetValue(2);
-                    String description = (String)reader.GetValue(5);
-                    int price = (int)reader.GetValue(4);
-                    Boolean available = (Boolean)reader.GetValue(6);
 
-                    Item newItem = new Item(category, itemId, thumbnail, name, description, price, available);
-                    allItems.Add(itemId, newItem);
-                }
-                conn.Close();
-                reader.Close();
-            }
+        private void cbx_ingredient_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            btn_add.Enabled = true;
         }
 
-        private void Pnl_login_Paint(object sender, PaintEventArgs e)
+        private void btn_print_Click(object sender, EventArgs e)
         {
-
-        }
-
-        private void Form1_Load(object sender, EventArgs e)
-        {
-
-        }
-
-        private void Pnl_employeeHome_Paint(object sender, PaintEventArgs e)
-        {
-
-        }
-
-        private void Pnl_customerHome_Paint(object sender, PaintEventArgs e)
-        {
-
-        }
-
-        private void Pnl_newOrder_Paint(object sender, PaintEventArgs e)
-        {
-
+            OrderPrint orderPrint = new OrderPrint();
+            orderPrint.Show();
         }
     }
 }

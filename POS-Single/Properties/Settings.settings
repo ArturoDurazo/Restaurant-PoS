@@ -3,16 +3,23 @@
   <Profiles />
   <Settings>
     <Setting Name="POSTGRES_USER" Type="System.String" Scope="User">
-      <Value Profile="(Default)">default</Value>
+      <Value Profile="(Default)">postgres</Value>
     </Setting>
     <Setting Name="POSTGRES_PASSWORD" Type="System.String" Scope="User">
-      <Value Profile="(Default)">default</Value>
+      <Value Profile="(Default)">imao567</Value>
     </Setting>
     <Setting Name="POSTGRES_HOST" Type="System.String" Scope="User">
       <Value Profile="(Default)">127.0.0.1</Value>
     </Setting>
     <Setting Name="POSTGRES_DB_NAME" Type="System.String" Scope="User">
-      <Value Profile="(Default)">postgres</Value>
+      <Value Profile="(Default)">pos_db</Value>
+    </Setting>
+    <Setting Name="pos_dbConnection" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"&gt;
+  &lt;ConnectionString&gt;Data Source=DESKTOP-GI8P1TA\SQLEXPRESS01;Initial Catalog=pos_db;Integrated Security=True&lt;/ConnectionString&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Data Source=DESKTOP-GI8P1TA\SQLEXPRESS01;Initial Catalog=pos_db;Integrated Security=True</Value>
     </Setting>
   </Settings>
 </SettingsFile>

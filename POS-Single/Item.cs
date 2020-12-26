@@ -15,9 +15,10 @@ namespace POS_Single
         private String name;
         private String description;
         private int price;
-        private Boolean available;
+        private bool available;
+        private bool toggled;
 
-        public Item(int category,int itemId, Image thumbnail, String name, String description, int price, Boolean available)
+        public Item(int category,int itemId, Image thumbnail, String name, String description, int price, bool available, bool toggled)
         {
             this.category = category;
             this.itemId = itemId;
@@ -26,6 +27,7 @@ namespace POS_Single
             this.description = description;
             this.price = price;
             this.available = available;
+            this.toggled = toggled;
         }
 
         public int getCategory()
@@ -61,6 +63,11 @@ namespace POS_Single
         public Boolean getAvailable()
         {
             return available;
+        }
+
+        public Boolean getToggled()
+        {
+            return toggled;
         }
 
     }

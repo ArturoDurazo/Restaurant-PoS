@@ -12,7 +12,7 @@ namespace POS_Single.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "16.4.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "16.7.0.0")]
     internal sealed partial class Settings : global::System.Configuration.ApplicationSettingsBase {
         
         private static Settings defaultInstance = ((Settings)(global::System.Configuration.ApplicationSettingsBase.Synchronized(new Settings())));
@@ -25,7 +25,7 @@ namespace POS_Single.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("default")]
+        [global::System.Configuration.DefaultSettingValueAttribute("postgres")]
         public string POSTGRES_USER {
             get {
                 return ((string)(this["POSTGRES_USER"]));
@@ -37,7 +37,7 @@ namespace POS_Single.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("default")]
+        [global::System.Configuration.DefaultSettingValueAttribute("imao567")]
         public string POSTGRES_PASSWORD {
             get {
                 return ((string)(this["POSTGRES_PASSWORD"]));
@@ -61,13 +61,24 @@ namespace POS_Single.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("postgres")]
+        [global::System.Configuration.DefaultSettingValueAttribute("pos_db")]
         public string POSTGRES_DB_NAME {
             get {
                 return ((string)(this["POSTGRES_DB_NAME"]));
             }
             set {
                 this["POSTGRES_DB_NAME"] = value;
+            }
+        }
+        
+        [global::System.Configuration.ApplicationScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.SpecialSettingAttribute(global::System.Configuration.SpecialSetting.ConnectionString)]
+        [global::System.Configuration.DefaultSettingValueAttribute("Data Source=DESKTOP-GI8P1TA\\SQLEXPRESS01;Initial Catalog=pos_db;Integrated Securi" +
+            "ty=True")]
+        public string pos_dbConnection {
+            get {
+                return ((string)(this["pos_dbConnection"]));
             }
         }
     }
